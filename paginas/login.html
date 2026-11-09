@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Oficina - Login</title>
+</head>
+<body>
+  <h1>Oficina Mecanica - Login</h1>
+
+  <form method="POST" action="/login">
+    <input type="email" name="email" placeholder="E-mail" required />
+    <input type="password" name="senha" placeholder="Senha" required />
+    <button>Entrar</button>
+  </form>
+
+  <!-- O marcador abaixo e trocado pela mensagem de erro (vazio quando nao ha erro) -->
+  <p>{{erro}}</p>
+</body>
+</html>

@@ -1,19 +1,20 @@
 {
-  "name": "oficina-backend",
+  "name": "oficina",
   "version": "1.0.0",
-  "description": "API da oficina mecanica",
-  "main": "src/app.js",
+  "description": "Sistema da oficina mecanica",
+  "main": "app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "node src/app.js",
+    "start": "node app.js",
+    "dev": "node app.js",
     "gerar-script": "node gerar-script.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "mustache": "^4.2.0",
     "mysql2": "^3.11.0"
   }
 }

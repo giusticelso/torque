@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Oficina - Clientes</title>
+</head>
+<body>
+  <h1>Clientes</h1>
+  <p><a href="/principal">Voltar</a></p>
+
+  <!-- [RN05] Busca: formulario GET, o termo vai na URL (/clientes?busca=maria) -->
+  <form method="GET" action="/clientes">
+    <input type="text" name="busca" placeholder="Buscar por nome" value="{{busca}}" />
+    <button>Buscar</button>
+  </form>
+
+  <table border="1">
+    <tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th></th></tr>
+
+    <!-- O bloco "clientes" (abre com # e fecha com /) repete este trecho uma vez para cada cliente da lista -->
+    {{#clientes}}
+    <tr>
+      <td>{{nome}}</td>
+      <td>{{cpf}}</td>
+      <td>{{telefone}}</td>
+      <td>{{email}}</td>
+      <td>
+        <a href="/clientes?editar={{id}}">Editar</a>
+        <!-- Excluir: POST com _method=DELETE vira DELETE /clientes/ID no servidor -->
+        <form method="POST" action="/clientes/{{id}}">
+          <input type="hidden" name="_method" value="DELETE" />
+          <button>Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {{/clientes}}
+  </table>
+
+  <!-- Bloco "editando" aberto com #: so aparece se estiver editando.
+       Aberto com ^ (circunflexo): so aparece se NAO estiver editando. -->
+  <h2>{{#editando}}Editar{{/editando}}{{^editando}}Cadastrar{{/editando}} cliente</h2>
+
+  <!-- O MESMO formulario serve para cadastrar e editar. A acao e os valores dos campos vem do servidor. -->
+  <form method="POST" action="{{acao}}">
+    {{#editando}}<input type="hidden" name="_method" value="PUT" />{{/editando}}
+    <input type="text" name="nome" placeholder="Nome" value="{{form.nome}}" required />
+    <input type="text" name="cpf" placeholder="CPF" value="{{form.cpf}}" required />
+    <input type="text" name="telefone" placeholder="Telefone" value="{{form.telefone}}" />
+    <input type="email" name="email" placeholder="E-mail" value="{{form.email}}" />
+    <button>{{#editando}}Salvar{{/editando}}{{^editando}}Cadastrar{{/editando}}</button>
+  </form>
+</body>
+</html>

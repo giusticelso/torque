@@ -1,13 +1,18 @@
 // Gera o arquivo database/script.sql
 //
 // O CPF criptografado e a senha com hash nao podem ser escritos a mao no SQL,
-// por isso este script usa a mesma chave do .env (utils/cripto.js) e o bcrypt
+// por isso este script usa a mesma chave do .env (o mesmo do app.js) e o bcrypt
 // para gerar os valores corretos e montar o arquivo .sql pronto.
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const { criptografarCpf } = require('./src/utils/cripto');
+const crypto = require('crypto');
+
+function criptografarCpf(texto) {
+  const cifra = crypto.createCipheriv('aes-256-cbc', process.env.CRIPTO_CHAVE, process.env.CRIPTO_IV);
+  return cifra.update(texto, 'utf8', 'hex') + cifra.final('hex');
+}
 
 const senhaHash = bcrypt.hashSync('123456', 10);
 
@@ -16,7 +21,7 @@ const cpf2 = criptografarCpf('22233344455');
 const cpf3 = criptografarCpf('33344455566');
 
 const sql = `-- Script gerado automaticamente por gerar-script.js
--- Nao edite o CPF ou a senha a mao: use "npm run gerar-script" no backend
+-- Nao edite o CPF ou a senha a mao: use "npm run gerar-script"
 
 CREATE DATABASE IF NOT EXISTS oficina;
 USE oficina;
@@ -81,6 +86,6 @@ INSERT INTO agendamentos (veiculo_id, data_agendamento, servico) VALUES
   (3, '2026-10-28 08:00:00', 'Revisao dos freios');
 `;
 
-const caminhoSaida = path.join(__dirname, '..', 'database', 'script.sql');
+const caminhoSaida = path.join(__dirname, 'database', 'script.sql');
 fs.writeFileSync(caminhoSaida, sql);
 console.log(`Arquivo gerado em ${caminhoSaida}`);

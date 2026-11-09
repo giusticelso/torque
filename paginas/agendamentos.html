@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Oficina - Agendamentos</title>
+</head>
+<body>
+  <h1>Agendamentos</h1>
+  <p><a href="/principal">Voltar</a></p>
+
+  <!-- [RN07] A lista ja chega ordenada pela data, com os dados do veiculo e do cliente -->
+  <table border="1">
+    <tr><th>Data</th><th>Servico</th><th>Veiculo</th><th>Cliente</th><th>Alterar data</th><th></th></tr>
+
+    {{#agendamentos}}
+    <tr>
+      <td>{{data_br}}</td>
+      <td>{{servico}}</td>
+      <td>{{placa}} - {{marca}} {{modelo}}</td>
+      <td>{{cliente_nome}}</td>
+      <td>
+        <!-- [RN08] Alterar a data: POST com _method=PUT vira PUT /agendamentos/ID -->
+        <form method="POST" action="/agendamentos/{{id}}">
+          <input type="hidden" name="_method" value="PUT" />
+          <input type="datetime-local" name="data_agendamento" value="{{data_input}}" required />
+          <button>Salvar</button>
+        </form>
+      </td>
+      <td>
+        <form method="POST" action="/agendamentos/{{id}}">
+          <input type="hidden" name="_method" value="DELETE" />
+          <button>Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {{/agendamentos}}
+  </table>
+
+  <h2>Cadastrar agendamento</h2>
+  <form method="POST" action="/agendamentos">
+    <select name="veiculo_id" required>
+      <option value="">Selecione o veiculo</option>
+      {{#veiculos}}
+      <option value="{{id}}">{{placa}} - {{marca}} {{modelo}}</option>
+      {{/veiculos}}
+    </select>
+    <input type="datetime-local" name="data_agendamento" required />
+    <input type="text" name="servico" placeholder="Servico" />
+    <button>Cadastrar</button>
+  </form>
+</body>
+</html>

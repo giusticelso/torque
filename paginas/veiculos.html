@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Oficina - Veiculos</title>
+</head>
+<body>
+  <h1>Veiculos</h1>
+  <p><a href="/principal">Voltar</a></p>
+
+  <table border="1">
+    <tr><th>Placa</th><th>Marca</th><th>Modelo</th><th>Ano</th><th>Cliente</th><th></th></tr>
+
+    {{#veiculos}}
+    <tr>
+      <td>{{placa}}</td>
+      <td>{{marca}}</td>
+      <td>{{modelo}}</td>
+      <td>{{ano}}</td>
+      <td>{{cliente_id}}</td>
+      <td>
+        <a href="/veiculos?editar={{id}}">Editar</a>
+        <form method="POST" action="/veiculos/{{id}}">
+          <input type="hidden" name="_method" value="DELETE" />
+          <button>Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {{/veiculos}}
+  </table>
+
+  <h2>{{#editando}}Editar{{/editando}}{{^editando}}Cadastrar{{/editando}} veiculo</h2>
+
+  <form method="POST" action="{{acao}}">
+    {{#editando}}<input type="hidden" name="_method" value="PUT" />{{/editando}}
+
+    <!-- [RN09] O usuario ESCOLHE o dono do veiculo entre os clientes cadastrados.
+         O marcador "selecionado" vale "selected" para o dono atual (na edicao) e vazio nos demais. -->
+    <select name="cliente_id" required>
+      <option value="">Selecione o cliente</option>
+      {{#clientes}}
+      <option value="{{id}}" {{selecionado}}>{{nome}}</option>
+      {{/clientes}}
+    </select>
+
+    <input type="text" name="placa" placeholder="Placa" value="{{form.placa}}" required />
+    <input type="text" name="marca" placeholder="Marca" value="{{form.marca}}" />
+    <input type="text" name="modelo" placeholder="Modelo" value="{{form.modelo}}" />
+    <input type="number" name="ano" placeholder="Ano" value="{{form.ano}}" />
+    <button>{{#editando}}Salvar{{/editando}}{{^editando}}Cadastrar{{/editando}}</button>
+  </form>
+
+  <p>{{erro}}</p>
+</body>
+</html>

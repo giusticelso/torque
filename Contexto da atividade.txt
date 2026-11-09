@@ -1,0 +1,17 @@
+Contextualização
+
+Uma oficina mecânica enfrenta dificuldades em sua rotina de atendimentos devido a ausência de um sistema informatizado. O controle manual dos agendamentos e dos registros de clientes e veiculos tem ocasionado perda de horarios, duplicidade de informacoes e falhas no armazenamento de dados. Alem disso, a ausência de mecanismos adequados de proteção dos dados pessoais dos clientes, como o CPF, pode comprometer a segurança dessas informações e resultar no descumprimento das disposições da Lei Geral de Proteção de Dados (LGPD).
+
+Para resolver essa situação, o gestor da oficina contratou sua equipe para desenvolver uma solução de software que organize o processo de agendamento e gestão de informações. Durante a reuniao inicial, o gestor destacou a importancia da autenticacao dos usuarios com tempo de expiracao, da protecao dos dados pessoais armazenados e da documentacao tecnica do sistema, incluindo requisitos funcionais e geracao do diagrama entidade relacionamento, a fim de garantir a manutencao futura do sistema.
+
+Apos a reunião com o gestor da oficina, foram definidas algumas regras de negocio:
+
+Regras de negócio
+
+No script do banco de dados devem existir pelo menos tres registros para todas as tabelas criadas, respeitando os tipos de dados, chaves primarias e estrangeiras.
+Na funcionalidade de login, fazer validacao em caso de falha na autenticacao, com tempo de expiracao para o token gerado.
+O CPF dos clientes deve ser armazenado de forma criptografada no banco de dados.
+A funcionalidade principal do sistema deve exibir: nome do usuário logado e uma forma de acessar os demais recursos, assim como uma maneira de sair do sistema.
+A funcionalidade de cliente deve conter um recurso de busca para que o usuario possa inserir um termo, o qual, apos insercao e confirmacao, deve exibir a atualizacao da listagem com os registros que correspondem. A funcionalidade também deve permitir editar os dados de um cliente ja cadastrado, salvando a alteração no banco de dados.
+A funcionalidade de agendamento deve exibir a listagem dos agendamentos cadastrados, ordenada por dia de agendamento, trazendo todos os dados do cliente e do veiculo. A funcionalidade também deve permitir atualizar a data de um agendamento ja cadastrado, salvando a alteração no banco de dados.
+Ao cadastrar um novo veiculo, o usuário deve associa-lo a um cliente.
