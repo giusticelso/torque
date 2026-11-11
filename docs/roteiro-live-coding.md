@@ -4,7 +4,7 @@
 > Estratégia: construir o `app.js` (back) e a pasta `paginas/` (front, arquivos `.html`) **do zero, em camadas**, testando no navegador a cada etapa.
 > Cada etapa termina com algo que **funciona e pode ser mostrado**, e com um **checkpoint** que o aluno confere no próprio computador.
 
-> 🎯 **Por que este roteiro é detalhado:** na avaliação, os alunos construirão um sistema **semelhante** (outro tema, mesma arquitetura). Por isso a live ensina a **receita**, não só este projeto. O Anexo B resume a receita em passos reutilizáveis.
+> 🎯 **Por que este roteiro é detalhado:** na avaliação, os alunos construirão um sistema **semelhante** (outro tema, mesma arquitetura). Por isso a live ensina a **receita**, não só este projeto. O Anexo C resume a receita em passos reutilizáveis.
 
 ## Como usar este roteiro
 
@@ -76,7 +76,7 @@ torque/
 |---|---|---|
 | `docs/requisitos.md`, `docs/der.md` | Documentação exigida pelo gestor (feita no quadro/editor na etapa 0; **não incluída** neste repositório) | 0 |
 | `package.json`, `.env`, `.env.example`, `.gitignore` | Projeto e configuração | 1 |
-| `database/script.sql`, `gerar-script.js` | Banco de dados | 2 |
+| `gerar-script.js` → `database/script.sql` | Gerador (foco da etapa 2) e o SQL que ele produz | 2 |
 | `app.js` | Back-end (cresce a cada etapa) | 4 a 9 |
 | `paginas/*.html` | Front-end (uma página por etapa) | 5 a 9 |
 | `.env`, `node_modules/` | Locais, ignorados pelo git | explicar por que não vão ao git |
@@ -88,7 +88,7 @@ torque/
 - [ ] MySQL rodando; usuário/senha conhecidos.
 - [ ] Node.js instalado (`node -v`).
 - [ ] **Porta 3000 livre.** Um servidor antigo esquecido na porta faz o código novo nunca rodar (sintoma: "Método não permitido"). Verifique com `netstat -ano | findstr :3000` (Windows) e encerre o processo que aparecer.
-- [ ] Pasta vazia `oficina-live/` aberta no VS Code.
+- [ ] Pasta vazia `oficina-live/` aberta no VS Code, **com a subpasta `database/` já criada** (o gerador não cria a pasta) e a subpasta `paginas/`.
 - [ ] Repositório pronto em outra janela como **plano B** (se a live travar, copie a etapa).
 - [ ] Navegador com abas: `localhost:3000` e o MySQL Workbench/CLI.
 - [ ] Fonte do editor grande (≥ 18 pt).
@@ -223,12 +223,81 @@ node_modules/
 
 ---
 
-## Etapa 2 – Banco de dados (30 min) → RN01, RN03
+## Etapa 2 – Os dados do banco: o `gerar-script.js` (25 min) → RN01, RN03
 
-### 2.1 Modelagem
-Escreva as 4 tabelas explicando as chaves. **A ordem importa:** primeiro quem não depende de ninguém (`usuarios`, `clientes`), depois quem aponta para eles (`veiculos`, `agendamentos`).
+> 🎯 **Foco desta etapa:** não vamos modelar nem escrever o SQL ao vivo. O `script.sql` é um **produto** do `gerar-script.js`. O que a turma precisa entender é **por que** existe um gerador e **como** ele funciona, linha por linha.
 
-```sql
+### 2.1 Por que precisamos de um gerador?
+
+Mostre que **não dá para digitar à mão** dois valores do SQL:
+
+| Valor | Por quê |
+|---|---|
+| Senha com **hash** (bcrypt) | O hash tem "sal" aleatório e 60 caracteres; ninguém escreve isso de cabeça |
+| CPF **criptografado** (AES-256) | Só a chave do `.env` produz o valor certo; com outra chave o `app.js` não consegue descriptografar |
+
+**Fala:** "Se eu digitasse um CPF qualquer no `INSERT`, o `app.js` quebraria ao tentar descriptografar. O gerador usa **a mesma chave do `.env`** que o `app.js` usa; por isso os dois conversam."
+
+### 2.2 Construindo o `gerar-script.js` em 5 blocos
+
+⚠️ **Antes de começar:** crie a pasta `database/` vazia. O `fs.writeFileSync` cria o arquivo, mas **não cria a pasta**; sem ela o gerador falha com `ENOENT`.
+
+**Bloco 1 – Importações e `.env`**
+
+```js
+require('dotenv').config();           // 1º: lê o .env (chave e IV do CPF)
+const fs = require('fs');             // gravar o arquivo .sql
+const path = require('path');         // montar o caminho de forma segura (Windows/Linux)
+const bcrypt = require('bcryptjs');   // hash de senha
+const crypto = require('crypto');     // criptografia AES (já vem com o Node)
+```
+
+- É o **mesmo `.env`** do `app.js`: o gerador e o servidor precisam usar a mesma chave.
+- `fs`, `path` e `crypto` são nativos; `bcryptjs` e `dotenv` vieram do `npm install`.
+
+**Bloco 2 – Função que criptografa o CPF**
+
+```js
+function criptografarCpf(texto) {
+  const cifra = crypto.createCipheriv('aes-256-cbc', process.env.CRIPTO_CHAVE, process.env.CRIPTO_IV);
+  return cifra.update(texto, 'utf8', 'hex') + cifra.final('hex');
+}
+```
+
+- `aes-256-cbc`: algoritmo. **256** = chave de 32 caracteres; o **IV** (16 caracteres) é o ponto de partida do bloco.
+- `update(texto, 'utf8', 'hex')`: entra texto comum, sai **hexadecimal**. `final('hex')` fecha o último bloco. Por isso o resultado tem 32 caracteres (e a coluna é `VARCHAR(255)`).
+- É a **mesma função** que existe no `app.js` (`criptografar`). Pergunte: *"Por que repetir o código em vez de importar do `app.js`?"* → o gerador roda **sozinho**, sem subir o servidor nem conectar ao banco. (Melhoria: extrair para um módulo `cripto.js` usado pelos dois.)
+
+**Teste ao vivo:** acrescente ao fim do arquivo `console.log(criptografarCpf('11122233344'))` e rode `node gerar-script.js` **duas vezes**:
+
+| | 1ª execução | 2ª execução |
+|---|---|---|
+| CPF criptografado | `a3f1…` | `a3f1…` (**igual**) |
+
+Agora troque para `console.log(bcrypt.hashSync('123456', 10))` e rode duas vezes: o hash **muda a cada vez** (tem "sal"). Isso abre a discussão da etapa 3. Depois **apague** os `console.log` de teste.
+
+**Bloco 3 – Gerando os valores**
+
+```js
+const senhaHash = bcrypt.hashSync('123456', 10);   // uma vez só: os 3 usuários dividem o mesmo hash
+
+const cpf1 = criptografarCpf('11122233344');
+const cpf2 = criptografarCpf('22233344455');
+const cpf3 = criptografarCpf('33344455566');
+```
+
+- `10` = custo (rounds) do bcrypt: quanto maior, mais lento e mais difícil de quebrar por força bruta.
+- `hashSync` (versão **síncrona**) é aceitável aqui porque é um script de uma execução só; no `app.js` usamos `bcrypt.compare` com `await`.
+- Todos os usuários terão a senha `123456` **só para facilitar os testes**.
+
+**Bloco 4 – O SQL dentro de uma *template string***
+
+A string entre crases (`` ` ``) aceita **várias linhas** e **`${variável}`**. Escreva o início e mostre que o `${senhaHash}` será trocado pelo valor gerado:
+
+```js
+const sql = `-- Script gerado automaticamente por gerar-script.js
+-- Nao edite o CPF ou a senha a mao: use "npm run gerar-script"
+
 CREATE DATABASE IF NOT EXISTS oficina;
 USE oficina;
 
@@ -242,14 +311,14 @@ CREATE TABLE usuarios (
 CREATE TABLE clientes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nome VARCHAR(100) NOT NULL,
-  cpf VARCHAR(255) NOT NULL,        -- 255: o texto criptografado é maior que 11 dígitos
+  cpf VARCHAR(255) NOT NULL,
   telefone VARCHAR(20),
   email VARCHAR(100)
 );
 
 CREATE TABLE veiculos (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  cliente_id INT NOT NULL,          -- RN09: não existe veículo sem cliente
+  cliente_id INT NOT NULL,
   placa VARCHAR(10) NOT NULL,
   marca VARCHAR(50),
   modelo VARCHAR(50),
@@ -264,83 +333,79 @@ CREATE TABLE agendamentos (
   servico VARCHAR(100),
   FOREIGN KEY (veiculo_id) REFERENCES veiculos(id)
 );
-```
 
-**Perguntas:**
-- *"Por que `cpf` é `VARCHAR(255)` e não `CHAR(11)`?"* → porque guardamos o valor **criptografado** (hexadecimal, 32 caracteres).
-- *"Por que `email` é `UNIQUE`?"* → dois usuários com o mesmo e-mail tornariam o login ambíguo.
-- *"O que a `FOREIGN KEY` impede?"* → um veículo apontar para um cliente que não existe, ou apagar um cliente que ainda tem veículos.
+-- RN01: pelo menos 3 registros em cada tabela
 
-### 2.2 Os dados – por que precisamos de um gerador?
-Mostre que **não dá para digitar o CPF criptografado nem o hash da senha à mão**. Crie o `gerar-script.js` mostrando só o essencial:
-
-```js
-require('dotenv').config();
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-
-function criptografarCpf(texto) {
-  const cifra = crypto.createCipheriv('aes-256-cbc', process.env.CRIPTO_CHAVE, process.env.CRIPTO_IV);
-  return cifra.update(texto, 'utf8', 'hex') + cifra.final('hex');
-}
-
-const senhaHash = bcrypt.hashSync('123456', 10);
-console.log(senhaHash, criptografarCpf('11122233344'));
-```
-
-Rode duas vezes (`node gerar-script.js`): o **hash do bcrypt muda a cada execução** (tem "sal"), o **CPF criptografado não muda**. Isso abre a discussão da etapa 3.
-
-Depois, evolua o arquivo até a versão completa do repositório. A estrutura final é:
-
-1. Gera `senhaHash` (uma vez, reaproveitada pelos 3 usuários) e `cpf1`, `cpf2`, `cpf3`.
-2. Monta uma **template string** com todo o SQL (`CREATE` das tabelas + `INSERT`s), usando `${senhaHash}`, `${cpf1}` etc.
-3. Grava com `fs.writeFileSync(path.join(__dirname, 'database', 'script.sql'), sql)`.
-
-Os `INSERT`s (RN01: **3 linhas por tabela**):
-
-```sql
+-- Usuario de teste: admin@oficina.com / 123456
 INSERT INTO usuarios (nome, email, senha) VALUES
   ('Administrador', 'admin@oficina.com', '${senhaHash}'),
   ('Carlos Mecanico', 'carlos@oficina.com', '${senhaHash}'),
   ('Fernanda Atendente', 'fernanda@oficina.com', '${senhaHash}');
 
+-- CPF salvo criptografado [RN03]
 INSERT INTO clientes (nome, cpf, telefone, email) VALUES
   ('Joao da Silva', '${cpf1}', '(11) 90000-1111', 'joao.silva@email.com'),
   ('Maria Souza', '${cpf2}', '(11) 90000-2222', 'maria.souza@email.com'),
   ('Pedro Oliveira', '${cpf3}', '(11) 90000-3333', 'pedro.oliveira@email.com');
 
+-- Cada veiculo associado a um cliente [RN09]
 INSERT INTO veiculos (cliente_id, placa, marca, modelo, ano) VALUES
   (1, 'ABC1D23', 'Volkswagen', 'Gol', 2018),
   (2, 'DEF4E56', 'Fiat', 'Palio', 2015),
   (3, 'GHI7F89', 'Chevrolet', 'Onix', 2021);
 
+-- Datas fora de ordem para provar que a ordenacao funciona [RN07]
 INSERT INTO agendamentos (veiculo_id, data_agendamento, servico) VALUES
   (2, '2026-11-05 09:00:00', 'Troca de oleo'),
   (1, '2026-10-20 14:30:00', 'Alinhamento e balanceamento'),
   (3, '2026-10-28 08:00:00', 'Revisao dos freios');
+`;
 ```
 
-**Pontos para discutir**
-- Os `cliente_id` e `veiculo_id` dos `INSERT`s **precisam existir** (1, 2, 3), senão a chave estrangeira recusa.
-- As datas dos agendamentos estão **fora de ordem de propósito**, para provar o `ORDER BY` na etapa 9.
-- Todos os usuários usam a senha `123456` (o mesmo hash) só para facilitar o teste.
+> 💬 **Como conduzir:** o SQL das tabelas **não é o foco**; cole o bloco pronto e percorra só o que importa para o gerador. Quem quiser aprofundar o modelo pode consultar o DER da etapa 0.
 
-Rode:
+**O que explicar neste bloco (e só isso):**
+- Só **quatro** pontos do SQL dependem do JavaScript: `${senhaHash}` (3×) e `${cpf1}`, `${cpf2}`, `${cpf3}`. **Todo o resto é texto fixo.**
+- `cpf VARCHAR(255)`: o valor gravado é o texto **criptografado**, não 11 dígitos.
+- Os `cliente_id` e `veiculo_id` dos `INSERT`s (1, 2, 3) **precisam existir**; senão a chave estrangeira recusa. Por isso a ordem: `usuarios` e `clientes` → `veiculos` → `agendamentos`.
+- RN01: **3 linhas por tabela**. As datas dos agendamentos estão **fora de ordem de propósito** (prova do `ORDER BY` na etapa 9).
+- ⚠️ Os `--` dentro da string são comentários **do SQL**, não do JavaScript; vão parar dentro do arquivo gerado.
+
+**Bloco 5 – Gravando o arquivo**
+
+```js
+const caminhoSaida = path.join(__dirname, 'database', 'script.sql');
+fs.writeFileSync(caminhoSaida, sql);
+console.log(`Arquivo gerado em ${caminhoSaida}`);
+```
+
+- `__dirname` = pasta onde está o `gerar-script.js`. Funciona **de qualquer pasta** em que o comando for chamado.
+- `path.join` monta o caminho com a barra correta para cada sistema operacional.
+- `writeFileSync` **sobrescreve** o arquivo se ele já existir: rodar o gerador de novo é seguro.
+
+### 2.3 Rodar e conferir
 
 ```bash
 npm run gerar-script
 mysql -u root -p < database/script.sql
 ```
 
-### 2.3 Conferir
+Abra o `database/script.sql` gerado e mostre que o `${senhaHash}` virou um texto como `$2a$10$...` e os CPFs viraram hexadecimais. Depois, no MySQL:
+
 ```sql
+USE oficina;
 SELECT id, nome, cpf FROM clientes;    -- CPF ilegível = RN03 ✅
 SELECT COUNT(*) FROM agendamentos;     -- 3 = RN01 ✅
 ```
 
-⚠️ Se rodar o script de novo, o `CREATE TABLE` falha porque as tabelas já existem. Para recarregar, apague o banco antes: `DROP DATABASE oficina;`.
+**Perguntas de fixação**
+- *"Se eu mudar o `CRIPTO_CHAVE` no `.env` depois de carregar o banco, o que acontece na tela de clientes?"* → erro ao descriptografar; é preciso **regerar o script e recarregar o banco**.
+- *"Por que o hash da senha muda a cada execução e o CPF não?"* → o bcrypt usa um sal aleatório; no AES, a mesma chave + mesmo IV + mesmo texto = mesma saída (é a limitação do IV fixo; veja a seção 11).
+- *"Posso editar o `script.sql` à mão?"* → não: ele é **gerado**; a fonte da verdade é o `gerar-script.js`.
 
-**Checkpoint:** banco `oficina` com 4 tabelas e 3 linhas em cada.
+⚠️ Se rodar o `script.sql` de novo, o `CREATE TABLE` falha porque as tabelas já existem. Para recarregar, apague antes: `DROP DATABASE oficina;`.
+
+**Checkpoint:** `gerar-script.js` completo, `database/script.sql` gerado e carregado (4 tabelas, 3 linhas em cada).
 
 ---
 
@@ -436,6 +501,37 @@ app.listen(porta, () => console.log(`Oficina rodando em http://localhost:${porta
 
 Rode `npm start`. O servidor sobe (ainda sem rotas; o navegador mostra "Cannot GET /").
 
+**Explicando o esqueleto, linha a linha** (percorra apontando com o cursor):
+
+| Trecho | O que explicar |
+|---|---|
+| `require('dotenv').config()` | Lê o `.env` e coloca cada linha em `process.env`. Tem que ser a **primeira** linha: qualquer `process.env.X` antes dela seria `undefined` |
+| `const fs`, `path`, `crypto` | Módulos **nativos** do Node (não precisam de `npm install`). `fs` lê arquivos (usado pelo `mostrar`), `path` monta caminhos, `crypto` criptografa |
+| `const express = require('express')` | Traz a biblioteca que cria o servidor web |
+| `mysql2/promise` | Versão do driver que devolve **Promises**; por isso podemos usar `await` nas consultas |
+| `bcryptjs`, `jsonwebtoken`, `cookie-parser`, `mustache` | Uma biblioteca por tarefa: hash de senha, token, leitura de cookies e preenchimento dos `{{marcadores}}` |
+| `const app = express()` | Cria a aplicação. `app` é o objeto em que penduramos middlewares e rotas |
+| `app.use(express.urlencoded(...))` | **Middleware**: roda em todo pedido, antes das rotas. Este lê os dados do `<form>` e cria `req.body`. Sem ele, `req.body` é `undefined` |
+| `extended: false` | Usa o interpretador simples de formulários (campos planos, sem objetos aninhados); é o que precisamos |
+| `app.use(cookieParser())` | Cria `req.cookies` a partir do cabeçalho `Cookie` do navegador |
+| `mysql.createPool({...})` | **Pool** = conjunto de conexões reaproveitadas. Mais eficiente do que abrir e fechar uma conexão por pedido |
+| `dateStrings: true` | Datas voltam como texto (`'2026-10-20 14:30:00'`), sem conversão de fuso horário |
+| `process.env.PORT \|\| 3000` | Usa a porta do `.env`; se não existir, 3000 |
+| `app.listen(porta, callback)` | "Liga" o servidor. O *callback* roda uma vez, quando ele está pronto, e imprime o endereço |
+
+**Anatomia de um middleware** (desenhe no quadro; será usada no `_method` e no porteiro):
+
+```js
+app.use((req, res, next) => {
+  // req  = o pedido que chegou   (req.body, req.query, req.params, req.cookies, req.method)
+  // res  = a resposta a devolver (res.send, res.redirect, res.status, res.cookie)
+  // next = "pode seguir para o próximo da fila"
+  next();
+});
+```
+
+> Se o middleware **não** chamar `next()` nem responder, o navegador fica carregando para sempre. 🕵️ Sugestão: tire o `next()` de propósito e peça para explicarem o sintoma.
+
 > 📌 **Regra de organização do `app.js` (repita ao longo da aula):** por convenção o `app.listen` fica **sempre por último**. Tudo que construirmos nas próximas etapas entra **acima** dele.
 
 ### 4.4 Funções de apoio do back
@@ -459,6 +555,12 @@ function descriptografar(texto) {
   return decifra.update(texto, 'hex', 'utf8') + decifra.final('utf8');
 }
 ```
+
+**Explicando as funções de apoio:**
+
+- **`mostrar(nome, dados = {})`**: recebe o nome da página e um objeto de dados. `path.join(__dirname, 'paginas', ...)` monta o caminho completo; `fs.readFileSync(arquivo, 'utf8')` lê o `.html` como texto; `Mustache.render(texto, dados)` troca os `{{marcadores}}` e devolve o HTML pronto. `dados = {}` (valor padrão) permite chamar `mostrar('login')` sem dados.
+- **`criptografar` / `descriptografar`**: são **espelhos**. Uma usa `createCipheriv` (cifrar), a outra `createDecipheriv` (decifrar), com a mesma chave e o mesmo IV. A ordem dos tipos se inverte: cifrar vai de `utf8` → `hex`; decifrar vai de `hex` → `utf8`.
+- **Por que funções?** Para o resto do `app.js` ficar limpo: as rotas só chamam `criptografar(cpf)` sem saber como a cifra funciona.
 
 > Como o `mostrar` lê o arquivo a cada pedido, dá para **editar o `.html` e só dar F5**, sem reiniciar o servidor. Ótimo para a live. Já mudanças no `app.js` exigem reiniciar (`Ctrl+C` e `npm start`).
 
@@ -529,6 +631,22 @@ Mostre no DevTools (aba *Network*) que o navegador enviou POST e que o Express e
 </body>
 </html>
 ```
+
+**Explicando o `login.html` (primeira página: aproveite para ensinar a estrutura de todas):**
+
+| Trecho | O que explicar |
+|---|---|
+| `<!DOCTYPE html>` | Avisa ao navegador que é HTML5 |
+| `<html lang="pt-br">` | Idioma da página (leitores de tela, corretor ortográfico) |
+| `<head>` + `<meta charset="UTF-8" />` | Cabeçalho invisível. O `charset` evita acentos quebrados |
+| `<title>` | Texto da aba do navegador |
+| `<body>` | Tudo que aparece na tela |
+| `<h1>` | Título principal (um por página) |
+| `<form method="POST" action="/login">` | `action` = **para qual URL** os dados vão; `method` = **com qual verbo** |
+| `<input type="email" name="email" required />` | `type="email"` valida o formato; `required` impede envio vazio; **`name` = chave no `req.body`** |
+| `<input type="password">` | Esconde o que é digitado |
+| `<button>` | Dentro de um `<form>`, envia o formulário |
+| `<p>{{erro}}</p>` | Marcador: se o back não enviar `erro`, fica **vazio**; se enviar, aparece a mensagem |
 
 > Cada `name="..."` do formulário vira uma propriedade de `req.body` no back (`name="email"` → `req.body.email`). **O `name` é o elo entre o front e o back.**
 
@@ -630,6 +748,14 @@ Leitura em três passos: (1) pega o token do cookie, (2) `jwt.verify` valida ass
 app.get('/principal', (req, res) => res.send(mostrar('principal', { nome: req.usuario.nome })));
 ```
 
+**Explicando o `principal.html`:**
+- `<h1>Ola, {{nome}}</h1>`: o `{{nome}}` é o único "buraco" da página; o back o preenche com `req.usuario.nome`.
+- `<a href="/clientes">`: um **link** faz um pedido **GET** à URL. Os três links levam às rotas das próximas etapas (por enquanto dão erro, e tudo bem).
+- O `|` entre os links é só texto de separação.
+- `<form method="POST" action="/sair"><button>Sair</button></form>`: um formulário **sem campos**, só para disparar um POST. Compare com o login: lá o formulário carregava dados; aqui só o pedido importa.
+
+**Explicando a rota:** `app.get('/principal', (req, res) => res.send(mostrar(...)))` tem três partes: o **verbo** (`get`), o **caminho** (`/principal`) e a **função** que recebe `req` e `res`. `res.send(html)` devolve a página ao navegador. Sem chaves `{}` e sem `return`, porque a arrow function tem uma única expressão.
+
 - O nome vem de `req.usuario`, preenchido pelo porteiro a partir do token → **sem nova consulta ao banco**.
 - Por que "Sair" é um `POST` e não um link? (ações que mudam estado não devem ser `GET`)
 
@@ -681,6 +807,27 @@ Para cada recurso repetimos o mesmo padrão: **(1) o `.html`** desenha a tela, *
 ```
 
 `{{#clientes}} ... {{/clientes}}` repete a linha `<tr>` uma vez para cada cliente.
+
+**Explicando o HTML da listagem:**
+
+| Trecho | O que explicar |
+|---|---|
+| `<a href="/principal">Voltar</a>` | Link de volta ao menu |
+| `<form method="GET" action="/clientes">` | Formulário de busca: **GET**, pois só consulta. Os dados vão na URL |
+| `name="busca"` | Vira `req.query.busca` (não `req.body`, porque é GET) |
+| `value="{{busca}}"` | Mantém o termo digitado depois de buscar |
+| `<table border="1">` | Tabela. `border="1"` só para enxergar as linhas sem CSS |
+| `<tr>` / `<th>` / `<td>` | Linha / célula de cabeçalho / célula de dado |
+| 1ª `<tr>` com `<th>` | Fica **fora** do `{{#clientes}}`: o cabeçalho aparece uma vez só |
+| `{{#clientes}}...{{/clientes}}` | O que está dentro repete por cliente; dentro dele, `{{nome}}` já se refere ao cliente da vez |
+
+**Explicando a rota `GET /clientes`, linha a linha:**
+1. `req.query.busca || ''`: se não houver busca, usa texto vazio.
+2. `db.query('... WHERE nome LIKE ?', [...])`: o `?` é substituído pelo valor do array, **com proteção** contra SQL Injection.
+3. `const [lista] = ...`: desestruturação; pega só as linhas.
+4. `lista.map(...)`: cria uma **nova lista**, transformando cada item (aqui, trocando o `cpf`).
+5. `res.send(mostrar('clientes', { busca, clientes }))`: `{ busca, clientes }` é atalho de `{ busca: busca, clientes: clientes }`. As **chaves** do objeto são os nomes dos marcadores do `.html`.
+6. `async`/`await`: o banco demora; `await` "espera" a resposta sem travar o servidor. Toda função que usa `await` precisa ser `async`.
 
 **Back:**
 
@@ -854,6 +1001,60 @@ app.delete('/clientes/:id', async (req, res) => {
 
 ✅ RN05 e RN06
 
+### 7.5 Como o `clientes.html` fica no fim (versão completa)
+
+Mostre o arquivo inteiro para a turma conferir o que foi acrescentado em cada passo (7.1 lista/busca → 7.2 formulário → 7.3 `{{#editando}}` → 7.4 Excluir):
+
+```html
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Oficina - Clientes</title>
+</head>
+<body>
+  <h1>Clientes</h1>
+  <p><a href="/principal">Voltar</a></p>
+
+  <!-- [RN05] Busca: GET, o termo vai na URL -->
+  <form method="GET" action="/clientes">
+    <input type="text" name="busca" placeholder="Buscar por nome" value="{{busca}}" />
+    <button>Buscar</button>
+  </form>
+
+  <table border="1">
+    <tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th></th></tr>
+    {{#clientes}}
+    <tr>
+      <td>{{nome}}</td>
+      <td>{{cpf}}</td>
+      <td>{{telefone}}</td>
+      <td>{{email}}</td>
+      <td>
+        <a href="/clientes?editar={{id}}">Editar</a>
+        <form method="POST" action="/clientes/{{id}}">
+          <input type="hidden" name="_method" value="DELETE" />
+          <button>Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {{/clientes}}
+  </table>
+
+  <h2>{{#editando}}Editar{{/editando}}{{^editando}}Cadastrar{{/editando}} cliente</h2>
+
+  <form method="POST" action="{{acao}}">
+    {{#editando}}<input type="hidden" name="_method" value="PUT" />{{/editando}}
+    <input type="text" name="nome" placeholder="Nome" value="{{form.nome}}" required />
+    <input type="text" name="cpf" placeholder="CPF" value="{{form.cpf}}" required />
+    <input type="text" name="telefone" placeholder="Telefone" value="{{form.telefone}}" />
+    <input type="email" name="email" placeholder="E-mail" value="{{form.email}}" />
+    <button>{{#editando}}Salvar{{/editando}}{{^editando}}Cadastrar{{/editando}}</button>
+  </form>
+</body>
+</html>
+```
+
 **Checkpoint:** `clientes.html` com busca, tabela (com Editar/Excluir) e formulário reaproveitado; `app.js` com `GET`, `POST`, `PUT` e `DELETE` de `/clientes` e a função `excluir`.
 
 ---
@@ -919,6 +1120,13 @@ Mesmo padrão da etapa 7 (tabela, formulário reaproveitado, `PUT`, `DELETE`). A
 </body>
 </html>
 ```
+
+**Explicando os elementos novos desta página:**
+- `<select name="cliente_id">` + `<option value="{{id}}">{{nome}}</option>`: o usuário **vê** o nome, mas o que é enviado é o `value` (o `id`). Chega ao back como `req.body.cliente_id`.
+- `<input type="number" name="ano">`: aceita só números; vazio chega como `''`.
+- Dois blocos `{{#...}}` na mesma página (`veiculos` na tabela, `clientes` no `<select>`): cada um repete com a sua lista.
+- O **botão Excluir fica dentro de um `<form>` por linha**: cada formulário tem a sua `action` com o `id` daquela linha.
+- `<p>{{erro}}</p>` no fim: recebe a mensagem da validação do back.
 
 `{{selecionado}}` vale `selected` para o dono atual (na edição) e vazio para os demais. O `<option>` com `value=""` é a opção "em branco" que o `required` rejeita.
 
@@ -1078,6 +1286,15 @@ O agendamento **não guarda** o cliente: chegamos nele *através do veículo*. R
 
 **Provar a ordenação:** os dados do script estão fora de ordem (05/11, 20/10, 28/10). Na tela devem aparecer 20/10 → 28/10 → 05/11. Remova o `ORDER BY` por um instante para ver a diferença. ✅ RN07
 
+**Explicando a rota `GET /agendamentos`:**
+1. Crases (`` ` ``) no SQL permitem escrever a consulta em várias linhas.
+2. Duas consultas: a **lista** (com `JOIN`, para a tabela) e os **veículos** (para o `<select>` do cadastro).
+3. `lista.map((a) => ({ ...a, data_br, data_input }))`: mantém todas as colunas e **acrescenta** duas formas de data.
+4. `new Date(...).toLocaleString('pt-BR')` → `20/10/2026, 14:30:00` (para **ler**).
+5. `.slice(0, 16).replace(' ', 'T')` → `2026-10-20T14:30` (formato do `datetime-local`, para **editar**).
+
+**Explicando o HTML de agendamentos:** a tabela mostra `{{data_br}}`, `{{placa}} - {{marca}} {{modelo}}` (colunas do `JOIN`) e `{{cliente_nome}}` (o apelido do SQL). O `<select name="veiculo_id">` lista os veículos; `<input type="datetime-local">` abre o seletor de data e hora do navegador; o campo `servico` é livre.
+
 **Detalhe do `datetime-local`:** o navegador envia `2026-11-05T09:00`; o MySQL espera `2026-11-05 09:00` → `.replace('T', ' ')`. E é por isso que usamos `dateStrings: true` no pool (a data chega como texto e pode ser manipulada com `.slice` e `.replace`).
 
 ### 9.2 Alterar a data (RN08) e excluir
@@ -1139,7 +1356,7 @@ Percorra a tabela da seção 1 marcando ✅ em cada regra. Faça o **teste de po
 - Quais regras de negócio viraram **SQL**? Quais viraram **código JS**? Quais viraram **HTML**?
 - O que falta para este sistema ir para produção? (ver seção 11)
 
-Mostre o `README.md` (como rodar) e passe para o **Anexo B**: a receita que os alunos usarão na avaliação.
+Mostre o `README.md` (como rodar) e passe para o **Anexo C**: a receita que os alunos usarão na avaliação.
 
 ---
 
@@ -1167,7 +1384,7 @@ Pontos reais do código que valem como conversa sobre maturidade de software:
 |---|---|---|
 | 0 | Entender o problema + requisitos + DER | 20 min |
 | 1 | Projeto Node, `.env` | 15 min |
-| 2 | Banco de dados + gerador | 30 min |
+| 2 | Gerador do script (`gerar-script.js`) | 25 min |
 | 3 | Hash × criptografia | 10 min |
 | 4 | Back e front separados, `{{marcadores}}`, verbos HTTP | 35 min |
 | 5 | Login + JWT + middleware | 35 min |
@@ -1176,7 +1393,7 @@ Pontos reais do código que valem como conversa sobre maturidade de software:
 | 8 | Veículos | 30 min |
 | 9 | Agendamentos | 35 min |
 | 10 | Fechamento | 15 min |
-| | **Total** | **≈ 4 h 40** (+ pausas) |
+| | **Total** | **≈ 4 h 35** (+ pausas) |
 
 > Se o tempo apertar: faça o **cadastro de veículos** e o **cadastro de agendamentos** apenas com colar-e-explicar (são o mesmo padrão da etapa 7) e concentre o tempo ao vivo em **login/JWT**, **criptografia do CPF**, **busca** e **JOIN**.
 
@@ -1226,7 +1443,35 @@ A **ordem** do arquivo faz parte da lógica. É assim que o `app.js` do reposit�
 | 13 | Agendamentos: `GET`, `POST`, `PUT`, `DELETE` | Protegidas |
 | 14 | `app.listen` | Sempre por último |
 
-## Anexo B – Receita para a avaliação (outro tema, mesma arquitetura)
+## Anexo B – Guia arquivo por arquivo (todos os códigos da live)
+
+Use esta tabela como "mapa de voo": para cada arquivo de código, **quando** ele nasce, **o que** explicar e **qual pergunta** fazer. Os arquivos de banco (`script.sql`) são só consequência do `gerar-script.js`.
+
+| Arquivo | Etapa | Explicar (essencial) | Pergunta de fixação |
+|---|---|---|---|
+| `package.json` | 1 | `main`, scripts `start` e `gerar-script`, lista de `dependencies` | *O que o `npm run gerar-script` executa de fato?* |
+| `.env` / `.env.example` | 1 | Cada variável; chave de 32 e IV de 16 caracteres; `.env` fora do git | *Por que o `.env.example` vai para o git e o `.env` não?* |
+| `.gitignore` | 1 | `node_modules/` (recriável com `npm install`) e `.env` (segredos) | *O que acontece se o `.env` for publicado?* |
+| `gerar-script.js` | 2 | 5 blocos: importações → `criptografarCpf` → `bcrypt.hashSync` → template string SQL → `writeFileSync` | *Por que o hash muda a cada execução e o CPF não?* |
+| `app.js` – topo (requires, `urlencoded`, `cookieParser`, `_method`, `db`) | 4 | Ordem dos middlewares; pool de conexões; `dateStrings` | *Por que o `_method` vem depois do `urlencoded`?* |
+| `app.js` – funções (`mostrar`, `criptografar`, `descriptografar`, `excluir`) | 4 e 7 | `mostrar` = ponte back→front; AES ida e volta; `excluir` com `try/catch` | *Por que `excluir` recebe `tabela` por parâmetro e é seguro?* |
+| `app.js` – login, sair, porteiro | 5 | `bcrypt.compare`, `jwt.sign` com `expiresIn`, cookie `httpOnly`, posição do `app.use` | *O que muda se o porteiro for colocado antes de `/login`?* |
+| `app.js` – `/principal` | 6 | `req.usuario` vem do token, sem ir ao banco | *Por que "Sair" é POST?* |
+| `app.js` – clientes | 7 | `LIKE`, `map` + `descriptografar`, `?editar=ID`, `PUT`, `DELETE` | *Onde o CPF é criptografado e onde é descriptografado?* |
+| `app.js` – veículos | 8 | `mostrarVeiculos` reaproveitada, `selecionado`, validação do `cliente_id`, `ano \|\| null` | *Quais são as 3 camadas que garantem o dono do veículo?* |
+| `app.js` – agendamentos | 9 | `JOIN` em cadeia, `AS`, `ORDER BY`, `data_br` × `data_input`, `replace('T', ' ')` | *Por que o agendamento chega ao cliente "através do veículo"?* |
+| `app.js` – `app.listen` | 4 | Sempre por último; `PORT` do `.env` | *O que acontece se uma rota ficar abaixo do `listen`?* (nada: ela ainda é registrada; a regra é de organização) |
+| `paginas/login.html` | 5 | `name` = chave do `req.body`; `{{erro}}` | *O que acontece se eu trocar `name="senha"` por `name="password"`?* |
+| `paginas/principal.html` | 6 | `{{nome}}`, links, formulário de sair | *Quem preenche o `{{nome}}`?* |
+| `paginas/clientes.html` | 7 | `{{#lista}}`, `{{^}}`, `{{form.x}}`, `{{acao}}`, `_method` oculto | *Como o mesmo formulário cadastra e edita?* |
+| `paginas/veiculos.html` | 8 | `<select>` alimentado por lista, `{{selecionado}}` | *Por que a opção em branco tem `value=""`?* |
+| `paginas/agendamentos.html` | 9 | Formulário pequeno por linha (alterar data), `datetime-local` | *Por que cada linha tem seu próprio `<form>`?* |
+
+> ✅ **Ordem de digitação sugerida:** `package.json`/`.env`/`.gitignore` → `gerar-script.js` → topo do `app.js` → `login.html` + login → `principal.html` → clientes (html + rotas) → veículos → agendamentos. É a mesma ordem das etapas 1 a 9.
+
+---
+
+## Anexo C – Receita para a avaliação (outro tema, mesma arquitetura)
 
 Na avaliação o enunciado será diferente (outra empresa, outras entidades), mas o caminho é o mesmo. Use esta receita:
 
